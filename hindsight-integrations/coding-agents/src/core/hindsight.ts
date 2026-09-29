@@ -451,15 +451,21 @@ export class HindsightClient {
     }
   }
 
+  /**
+   * Whether a session write-back may use `update_mode="append"`: the server must dedupe by
+   * `operation_id` AND the bank must keep document text, or the server rejects the append in the
+   * background (#4613). Only an explicit `store_document_text: false` answers "no" — an unreachable
+   * or unparseable config assumes the default (stored), so a flaky probe never downgrades appends.
+   */
   async supportsAppendRetain(): Promise<boolean> {
     if (!(await this.supportsIdempotentRetain())) return false;
     try {
       const r = await this.req("GET", this.bankUrl("/config"));
-      if (!r.ok) return false;
+      if (!r.ok) return true;
       const j = (await r.json()) as { config?: { store_document_text?: boolean } };
-      return j.config?.store_document_text === true;
+      return j.config?.store_document_text !== false;
     } catch {
-      return false;
+      return true;
     }
   }
 

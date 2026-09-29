@@ -58,6 +58,28 @@ describe("HindsightClient append capability", () => {
     const c = new HindsightClient({ apiUrl: "http://x", bank: "repo-a" });
     await expect(c.supportsAppendRetain()).resolves.toBe(true);
   });
+
+  it("assumes append is supported when the bank config probe fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/config")) throw new Error("timeout");
+        return { ok: true, status: 200, json: async () => ({ api_version: "0.10.1" }) } as any;
+      })
+    );
+    const c = new HindsightClient({ apiUrl: "http://x", bank: "repo-a" });
+    await expect(c.supportsAppendRetain()).resolves.toBe(true);
+  });
+
+  it("never appends against a server without idempotent retain, whatever the bank says", async () => {
+    const calls: any[] = [];
+    stubFetchRouted(calls, [
+      { match: (m, u) => m === "GET" && u.endsWith("/version"), json: { api_version: "0.1.0" } },
+    ]);
+    const c = new HindsightClient({ apiUrl: "http://x", bank: "repo-a" });
+    await expect(c.supportsAppendRetain()).resolves.toBe(false);
+    expect(calls.map((call) => call.url)).toEqual(["http://x/version"]);
+  });
 });
 
 function stubFetch(calls: any[], jsonImpl: () => Promise<unknown> = async () => ({ ok: true })) {
